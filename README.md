@@ -48,7 +48,7 @@ Example:
 To run a command inside an existing container:
 
 ```bash
-./shcoker run <container_id> <cmd>
+./shocker run <container_id> <cmd>
 ```
 
 Example:
