@@ -258,7 +258,7 @@ case $1 in
     print_help
     ;;
   *)
-    echo "Error: Unknwon command '$1'"
+    echo "Error: Unknown command '$1'"
     echo "Run './shocker help' for usage information."
     exit 1
     ;;
