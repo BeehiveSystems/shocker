@@ -220,6 +220,7 @@ SHocker - A lightweight container runtime
 Usage: ./shocker <command> [options]
 
 Commands:
+  pull <image>             Pull an image from the Docker Hub
   create <image>           Create a new container from a Docker image
   run <container_id> <cmd> Run a command in an existing container
   list                     List all containers
