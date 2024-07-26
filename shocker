@@ -160,18 +160,56 @@ run_container() {
 
 # Function to list all containers
 list_containers() {
-    local container_base_dir="/var/shocker/containers"
-    echo "Listing all containers:"
-    printf "%-40s | %-18s | %s\n" "ID" "Image" "Created"
-    echo "-----------------------------------------|--------------------|------------------------------------"
-    for container_dir in "$container_base_dir"/*; do
-        if [ -d "$container_dir" ]; then
-            local container_id=$(basename "$container_dir")
-            local image="$(echo "${container_id}" | sed 's/-/:/' | awk -F'_' '{print $1}')"
-            local created=$(stat -c %y "$container_dir" 2>/dev/null)
-            printf "%-40s | %-18s | %s\n" "$container_id" "$image" "$created"
+  local container_base_dir="/var/shocker/containers"
+  echo "Listing all containers:"
+  printf "%-40s | %-18s | %s\n" "ID" "Image" "Created"
+  echo "-----------------------------------------|--------------------|------------------------------------"
+  for container_dir in "$container_base_dir"/*; do
+      if [ -d "$container_dir" ]; then
+          local container_id=$(basename "$container_dir")
+          local image="$(echo "${container_id}" | sed 's/-/:/' | awk -F'_' '{print $1}')"
+          local created=$(stat -c %y "$container_dir" 2>/dev/null)
+          printf "%-40s | %-18s | %s\n" "$container_id" "$image" "$created"
+      fi
+  done
+}
+
+
+# Function to list all images
+list_images() {
+  local images_base_dir="/var/shocker/images"
+  echo "Listing all images:"
+  printf "%-32s | %-18s | %s\n" "Image" "Tag" "Created"
+  echo "---------------------------------|--------------------|------------------------------------" 
+  for image_dir in "$images_base_dir"/*; do
+    if [ -d "$image_dir" ]; then
+      local image=$(basename "$image_dir")
+      for tag_dir in "$image_dir"/*; do
+        if [ -d "$tag_dir" ]; then
+          local tag=$(basename "$tag_dir")
+          local created=$(stat -c %y "$tag_dir")
+          printf "%-32s | %-18s | %s\n" "$image" "$tag" "$created"
         fi
-    done
+      done
+    fi
+  done
+}
+
+
+# Function to delete an image
+delete_image() {
+  local name_tag=$1
+  local image_name="${name_tag%%:*}"
+  local image_tag="${name_tag##*:}"
+  local image_dir="/var/shocker/images/$image_name/$image_tag"
+
+  if [[ -d "$image_dir" ]]; then
+    echo "Deleting image $name_tag..."
+    sudo rm -rf "$image_dir"
+    echo -e "${GREEN}Image $name_tag deleted.${NC}"
+  else
+    echo -e "${RED}Image $name_tag not found.${NC}"
+  fi
 }
 
 
@@ -189,9 +227,10 @@ delete_container() {
   fi
 }
 
-# Function to prune all containers
-prune_containers() {
-  echo "WARNING: This action will delete ALL containers."
+
+# Function to prune all containers and images
+prune_all() {
+  echo "WARNING: This action will delete ALL containers and images."
   echo "This operation cannot be undone."
   echo -e -n "${YELLOW}Are you sure you want to proceed? (yes/no): ${NC}"
   read confirmation
@@ -201,17 +240,27 @@ prune_containers() {
     return
   fi
 
-  echo "Proceeding with container deletion..."
+  echo "Proceeding with container and image deletion..."
 
+  # Delete all containers
   local containers=$(./shocker list | tail -n +4 | awk '{print $1}')
-  local count=0
+  local container_count=0
 
   for container_id in $containers; do
     ./shocker delete $container_id
-    ((count++))
+    ((container_count++))
   done
 
-  echo -e "${GREEN}Prune operation complete. $count container(s) deleted.${NC}"
+  # Delete all images
+  local images=$(./shocker image ls | tail -n +2 | awk '{print $1":"$2}')
+  local image_count=0
+
+  for image_name_tag in $images; do
+    ./shocker delete_image $image_name_tag
+    ((image_count++))
+  done
+
+  echo -e "${GREEN}Prune operation complete. $container_count container(s) and $image_count image(s) deleted.${NC}"
 }
 
 
@@ -223,12 +272,14 @@ SHocker - A lightweight container runtime
 Usage: ./shocker <command> [options]
 
 Commands:
-  pull <image>             Pull an image from the Docker Hub
-  create <image>           Create a new container from a Docker image
-  run <container_id> <cmd> Run a command in an existing container
-  list                     List all containers
-  delete <container_id>    Delete a specific container
-  prune                    Remove all containers (with confirmation)
+  pull <image>               Pull an image from the Docker Hub
+  create <image>             Create a new container from a Docker image
+  run <container_id> <cmd>   Run a command in an existing container
+  list                       List all containers
+  image ls                   List all images
+  image rm <image:tag>       Delete the specified image
+  delete <container_id>      Delete a specific container
+  prune                      Remove all containers (with confirmation)
 
 Examples:
   Create a new container:
@@ -272,20 +323,40 @@ case $1 in
     shift
     list_containers
     ;;
+  image)
+    shift
+    case "$1" in
+      ls)
+        shift
+        list_images
+        ;;
+      rm)
+        shift
+        delete_image $1
+        ;;
+      *)
+        echo "Error: Unknown subcommand for 'image': '$1'"
+        echo "Available ./shocker image commands are: "
+        echo "ls                List all locally stored images"
+        echo "rm <image:tag>    Delete the specified image"
+        exit 1
+        ;;
+    esac
+    ;;
   delete)
     shift
     delete_container $1
     ;;
   prune)
     shift
-    prune_containers
+    prune_all
     ;;
   help|--help|-h)
     print_help
     ;;
   *)
     echo "Error: Unknown command '$1'"
-    echo "Run './shocker help' for usage information."
+    ./shocker help
     exit 1
     ;;
 esac
