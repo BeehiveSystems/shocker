@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#set -x
 # SHocker - A basic container runtime written in Bash shell
 
 # Define colors
@@ -10,11 +10,19 @@ NC='\033[0m' # No Color
 # Function to pull a Docker image and create a container
 create_container_from_image() {
   local image=$1
+  local tag="latest"
+
+  # Check if the image includes a tag; if not, default to "latest"
+  if [[ "$image" == *":"* ]]; then
+    tag="${image##*:}"
+    image="${image%%:*}"
+  fi
+
   local container_id="$(date +%s%N)"
   local container_dir="/var/shocker/containers/$container_id"
   local registry="https://registry-1.docker.io"
 
-  echo "Creating container $container_id from image $image..."
+  echo "Creating container $container_id from image $image:$tag..."
 
   mkdir -p "$container_dir/rootfs"
   mkdir -p "$container_dir/workspace"
@@ -27,30 +35,39 @@ create_container_from_image() {
     exit 1
   fi
 
-  # Fetch image index
-  local index=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.oci.image.index.v1+json" "$registry/v2/library/$image/manifests/latest")
-  if [[ -z "$index" ]]; then
-    echo "Error: Unable to retrieve image index."
-    exit 1
-  fi
-
-  # Select the correct platform (e.g., amd64)
-  local manifest_digest=$(echo "$index" | jq -r '.manifests[] | select(.platform.architecture=="amd64" and .platform.os=="linux") | .digest')
-
-  if [[ -z "$manifest_digest" ]]; then
-    echo "Error: No suitable manifest found for amd64/linux."
-    exit 1
-  fi
-
-  # Fetch the manifest for the selected platform
-  local manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.oci.image.manifest.v1+json" "$registry/v2/library/$image/manifests/$manifest_digest")
+  # Fetch manifest or image index
+  local manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" "$registry/v2/library/$image/manifests/$tag")
   if [[ -z "$manifest" ]]; then
     echo "Error: Unable to retrieve image manifest."
     exit 1
   fi
 
-  # Extract layers
-  local layers=$(echo "$manifest" | jq -r '.layers[].digest')
+  # Check if manifest is an image index (manifest list)
+  local media_type=$(echo "$manifest" | jq -r .mediaType)
+  if [[ "$media_type" == "application/vnd.docker.distribution.manifest.list.v2+json" ]]; then
+    # Find the manifest for the current architecture and OS (e.g., amd64/linux)
+    local target_arch="amd64"
+    local target_os="linux"
+    local manifest_digest=$(echo "$manifest" | jq -r --arg arch "$target_arch" --arg os "$target_os" '.manifests[] | select(.platform.architecture == $arch and .platform.os == $os) | .digest')
+    if [[ -z "$manifest_digest" ]]; then
+      echo "Error: No suitable image found for the architecture $target_arch and OS $target_os."
+      exit 1
+    fi
+    # Fetch the actual manifest
+    manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.v1+json" "$registry/v2/library/$image/manifests/$manifest_digest")
+  fi
+
+  # Extract layers from the manifest
+  local layers=$(echo "$manifest" | jq -r '.layers[]?.digest // empty')
+  if [[ -z "$layers" ]]; then
+    layers=$(echo "$manifest" | jq -r '.fsLayers[].blobSum // empty')
+  fi
+
+  if [[ -z "$layers" ]]; then
+    echo "Error: No layers found in the manifest."
+    exit 1
+  fi
+
   for layer in $layers; do
     local clean_layer=$(echo $layer | sed 's/^sha256://')
     echo "Downloading and extracting layer $clean_layer..."
@@ -246,4 +263,3 @@ case $1 in
     exit 1
     ;;
 esac
-
