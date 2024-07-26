@@ -7,8 +7,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Function to pull a Docker image and create a container
-create_container_from_image() {
+# Function to pull a Docker image and store its layers
+pull_image() {
   local image=$1
   local tag="latest"
 
@@ -18,28 +18,25 @@ create_container_from_image() {
     image="${image%%:*}"
   fi
 
-  local container_id="${image}-${tag}_$(date +%s%N)"
-  local container_dir="/var/shocker/containers/$container_id"
+  local image_dir="/var/shocker/images/$image/$tag"
   local registry="https://registry-1.docker.io"
 
-  echo "Creating container $container_id from image $image:$tag..."
+  echo "Pulling image $image:$tag..."
 
-  mkdir -p "$container_dir/rootfs"
-  mkdir -p "$container_dir/workspace"
-  mkdir -p "$container_dir/layers"
+  mkdir -p "$image_dir"
 
   # Get token from Docker Hub
   local token=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/$image:pull" | jq -r .token)
   if [[ -z "$token" ]]; then
     echo "Error: Unable to retrieve authentication token."
-    exit 1
+    return 1
   fi
 
   # Fetch manifest or image index
   local manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json" "$registry/v2/library/$image/manifests/$tag")
   if [[ -z "$manifest" ]]; then
     echo "Error: Unable to retrieve image manifest."
-    exit 1
+    return 1
   fi
 
   # Check if manifest is an image index
@@ -50,7 +47,7 @@ create_container_from_image() {
     local manifest_digest=$(echo "$manifest" | jq -r --arg arch "$target_arch" --arg os "$target_os" '.manifests[] | select(.platform.architecture == $arch and .platform.os == $os) | .digest')
     if [[ -z "$manifest_digest" ]]; then
       echo "Error: No suitable image found for the architecture $target_arch and OS $target_os."
-      exit 1
+      return 1
     fi
     # Fetch the actual manifest
     manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.v1+json, application/vnd.oci.image.manifest.v1+json" "$registry/v2/library/$image/manifests/$manifest_digest")
@@ -60,33 +57,62 @@ create_container_from_image() {
   local layers=$(echo "$manifest" | jq -r '.layers[]?.digest // empty')
   if [[ -z "$layers" ]]; then
     echo "Error: No layers found in the manifest."
-    exit 1
+    return 1
   fi
 
   for layer in $layers; do
     local clean_layer=$(echo $layer | sed 's/^sha256://')
-    echo "Downloading and extracting layer $clean_layer..."
+    echo "Downloading layer $clean_layer..."
 
-    curl -sL -H "Authorization: Bearer $token" "$registry/v2/library/$image/blobs/$layer" -o "$container_dir/layers/$clean_layer.tar"
+    curl -sL -H "Authorization: Bearer $token" "$registry/v2/library/$image/blobs/$layer" -o "$image_dir/$clean_layer.tar"
     if [[ $? -ne 0 ]]; then
       echo "Error: Failed to download layer $layer."
-      exit 1
+      return 1
     fi
+  done
 
-    sudo tar -xf "$container_dir/layers/$clean_layer.tar" -C "$container_dir/rootfs"
+  echo -e "${GREEN}Image $image:$tag pulled successfully.${NC}"
+}
+
+
+# Function to create a container from a pulled image
+create_container_from_image() {
+  local image=$1
+  local tag="latest"
+
+  # Check if the image name includes a tag, if not use "latest"
+  if [[ "$image" == *":"* ]]; then
+    tag="${image##*:}"
+    image="${image%%:*}"
+  fi
+
+  local container_id="${image}-${tag}_$(date +%s%N)"
+  local container_dir="/var/shocker/containers/$container_id"
+  local image_dir="/var/shocker/images/$image/$tag"
+
+  echo "Creating container $container_id from image $image:$tag..."
+
+  mkdir -p "$container_dir/rootfs"
+  mkdir -p "$container_dir/workspace"
+
+  if [ ! -d "$image_dir" ]; then
+    echo "Error: Image $image:$tag not found. Please pull the image first."
+    return 1
+  fi
+
+  for layer in "$image_dir"/*.tar; do
+    echo "Extracting layer $(basename "$layer")..."
+    sudo tar -xf "$layer" -C "$container_dir/rootfs"
     if [[ $? -ne 0 ]]; then
-      echo "Error: Failed to extract layer $layer."
-      exit 1
+      echo "Error: Failed to extract layer $(basename "$layer")."
+      return 1
     fi
-
-    rm "$container_dir/layers/$clean_layer.tar"
   done
 
   echo -e "${GREEN}Container created with ID: $container_id${NC}"
   echo "Root filesystem path: $container_dir/rootfs"
   echo "Workspace path: $container_dir/workspace"
 }
-
 
 
 # Function to run the container
@@ -223,6 +249,10 @@ EOF
 
 # Main script logic
 case $1 in
+  pull)
+    shift
+    pull_image $@
+    ;;
   create)
     shift
     create_container_from_image $@
@@ -231,7 +261,7 @@ case $1 in
     shift
 #    echo "Debug: Arguments being passed to run_container: "
 #    echo "$@"
-    run_container "$@"
+    run_container $@
     ;;
   list)
     shift
