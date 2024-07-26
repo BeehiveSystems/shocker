@@ -12,13 +12,13 @@ create_container_from_image() {
   local image=$1
   local tag="latest"
 
-  # Check if the image includes a tag; if not, default to "latest"
+  # Check if the image includes a tag, if not use "latest"
   if [[ "$image" == *":"* ]]; then
     tag="${image##*:}"
     image="${image%%:*}"
   fi
 
-  local container_id="$(echo $image)-$(echo $tag)_$(date +%s%N)"
+  local container_id="${image}-${tag}_$(date +%s%N)"
   local container_dir="/var/shocker/containers/$container_id"
   local registry="https://registry-1.docker.io"
 
@@ -28,7 +28,7 @@ create_container_from_image() {
   mkdir -p "$container_dir/workspace"
   mkdir -p "$container_dir/layers"
 
-  # Fetch token for Docker Hub
+  # Get token from Docker Hub
   local token=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/$image:pull" | jq -r .token)
   if [[ -z "$token" ]]; then
     echo "Error: Unable to retrieve authentication token."
@@ -36,16 +36,15 @@ create_container_from_image() {
   fi
 
   # Fetch manifest or image index
-  local manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" "$registry/v2/library/$image/manifests/$tag")
+  local manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json" "$registry/v2/library/$image/manifests/$tag")
   if [[ -z "$manifest" ]]; then
     echo "Error: Unable to retrieve image manifest."
     exit 1
   fi
 
-  # Check if manifest is an image index (manifest list)
+  # Check if manifest is an image index
   local media_type=$(echo "$manifest" | jq -r .mediaType)
-  if [[ "$media_type" == "application/vnd.docker.distribution.manifest.list.v2+json" ]]; then
-    # Find the manifest for the current architecture and OS (e.g., amd64/linux)
+  if [[ "$media_type" == "application/vnd.docker.distribution.manifest.list.v2+json" ]] || [[ "$media_type" == "application/vnd.oci.image.index.v1+json" ]]; then
     local target_arch="amd64"
     local target_os="linux"
     local manifest_digest=$(echo "$manifest" | jq -r --arg arch "$target_arch" --arg os "$target_os" '.manifests[] | select(.platform.architecture == $arch and .platform.os == $os) | .digest')
@@ -54,15 +53,11 @@ create_container_from_image() {
       exit 1
     fi
     # Fetch the actual manifest
-    manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.v1+json" "$registry/v2/library/$image/manifests/$manifest_digest")
+    manifest=$(curl -s -H "Authorization: Bearer $token" -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.v1+json, application/vnd.oci.image.manifest.v1+json" "$registry/v2/library/$image/manifests/$manifest_digest")
   fi
 
   # Extract layers from the manifest
   local layers=$(echo "$manifest" | jq -r '.layers[]?.digest // empty')
-  if [[ -z "$layers" ]]; then
-    layers=$(echo "$manifest" | jq -r '.fsLayers[].blobSum // empty')
-  fi
-
   if [[ -z "$layers" ]]; then
     echo "Error: No layers found in the manifest."
     exit 1
@@ -91,6 +86,7 @@ create_container_from_image() {
   echo "Root filesystem path: $container_dir/rootfs"
   echo "Workspace path: $container_dir/workspace"
 }
+
 
 
 # Function to run the container
