@@ -70,7 +70,7 @@ create_container_from_image() {
     rm "$container_dir/layers/$clean_layer.tar"
   done
 
-  echo "Container created with ID: $container_id"
+  echo -e "${GREEN}Container created with ID: $container_id${NC}"
   echo "Root filesystem path: $container_dir/rootfs"
   echo "Workspace path: $container_dir/workspace"
 }
