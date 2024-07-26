@@ -40,7 +40,7 @@ To create a new container from a Docker image:
 Example:
 
 ```bash
-./shocker create busybox
+./shocker create debian:latest
 ```
 
 ### Run a Command in a Container

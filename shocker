@@ -211,10 +211,10 @@ Commands:
 
 Examples:
   Create a new container:
-    ./shocker create alpine:latest
+    ./shocker create debian:latest
 
   Run a command in a container:
-    ./shocker run 1234567890 /bin/bash -c "echo Hello from SHocker!"
+    ./shocker run 1234567890 /bin/bash -c "echo Hello from SHocker."
 
   List all containers:
     ./shocker list
