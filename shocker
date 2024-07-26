@@ -181,7 +181,7 @@ prune_containers() {
 # Function to print help information
 print_help() {
     cat << EOF
-Mocker - A lightweight container runtime
+SHocker - A lightweight container runtime
 
 Usage: ./shocker <command> [options]
 
@@ -197,7 +197,7 @@ Examples:
     ./shocker create alpine:latest
 
   Run a command in a container:
-    ./shocker run 1234567890 /bin/bash -c "echo Hello from Mocker!"
+    ./shocker run 1234567890 /bin/bash -c "echo Hello from SHocker!"
 
   List all containers:
     ./shocker list
