@@ -262,7 +262,8 @@ case $1 in
     shift
 #    echo "Debug: Arguments being passed to run_container: "
 #    echo "$@"
-    run_container $@
+    # Do not unquote this
+    run_container "$@"
     ;;
   list)
     shift
