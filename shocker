@@ -18,7 +18,7 @@ create_container_from_image() {
     image="${image%%:*}"
   fi
 
-  local container_id="$(date +%s%N)"
+  local container_id="$(echo $image)-$(echo $tag)_$(date +%s%N)"
   local container_dir="/var/shocker/containers/$container_id"
   local registry="https://registry-1.docker.io"
 
