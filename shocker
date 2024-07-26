@@ -135,7 +135,9 @@ run_container() {
     mkdir -p "$workspace_dir"
   fi
 
-  echo "Running command in container $container_id..."
+  # Commented to reduce verbosity
+  # To-do: Bring this back with a verbosity flag
+  #echo "Running command in container $container_id..."
 
   # Ensure the workspace directory exists inside the root filesystem
   sudo mkdir -p "$rootfs_dir/workspace"
