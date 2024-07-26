@@ -5,6 +5,7 @@
 # Define colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Function to pull a Docker image and store its layers
@@ -182,9 +183,9 @@ delete_container() {
   if [[ -d "$container_dir" ]]; then
     echo "Deleting container $container_id..."
     sudo rm -rf "$container_dir"
-    echo "Container $container_id deleted."
+    echo -e "${GREEN}Container $container_id deleted.${NC}"
   else
-    echo "Container $container_id not found."
+    echo -e "${RED}Container $container_id not found.${NC}"
   fi
 }
 
