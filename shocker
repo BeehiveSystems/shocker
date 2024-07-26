@@ -133,14 +133,14 @@ run_container() {
 list_containers() {
     local container_base_dir="/var/shocker/containers"
     echo "Listing all containers:"
-    echo "ID                                | Image      | Created"
-    echo "----------------------------------|------------|-----------------------"
+    printf "%-40s | %-18s | %s\n" "ID" "Image" "Created"
+    echo "-----------------------------------------|--------------------|------------------------------------"
     for container_dir in "$container_base_dir"/*; do
         if [ -d "$container_dir" ]; then
             local container_id=$(basename "$container_dir")
             local image="$(echo "${container_id}" | sed 's/-/:/' | awk -F'_' '{print $1}')"
             local created=$(stat -c %y "$container_dir" 2>/dev/null)
-            echo "$container_id | $image | $created"
+            printf "%-40s | %-18s | %s\n" "$container_id" "$image" "$created"
         fi
     done
 }
