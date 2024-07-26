@@ -178,7 +178,6 @@ prune_containers() {
   local count=0
 
   for container_id in $containers; do
-    echo "Deleting container $container_id..."
     ./shocker delete $container_id
     ((count++))
   done
