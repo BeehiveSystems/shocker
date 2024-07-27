@@ -6,14 +6,15 @@
 
 - **Create** a container from a Docker image
 - **Run** commands inside a container
-- **List** all containers
-- **Delete** specific containers
-- **Prune** all containers with confirmation
+- **List** all containers or images
+- **Delete** specific containers or images
+- **Prune** all containers and images with confirmation
 
 ## Requirements
 
 - Bash shell
-- `curl` and `jq` installed
+- `curl` to pull from the Docker Hub
+- `jq` for parsing JSON results from curl
 - `tar` for extracting image layers
 - `sudo` for certain operations
 
@@ -29,18 +30,20 @@ chmod +x shocker
 
 ## Usage
 
+### Pull an Image
+
+To pull an image from the Docker Hub:
+
+```bash
+./shocker pull <image:tag>
+```
+
 ### Create a Container
 
 To create a new container from a Docker image:
 
 ```bash
-./shocker create <image>
-```
-
-Example:
-
-```bash
-./shocker create debian:latest
+./shocker create <image:tag>
 ```
 
 ### Run a Command in a Container
@@ -62,7 +65,7 @@ Example:
 To list all containers:
 
 ```bash
-./shocker list
+./shocker container ls
 ```
 
 ### Delete a Container
@@ -70,18 +73,20 @@ To list all containers:
 To delete a specific container:
 
 ```bash
-./shocker delete <container_id>
+./shocker container rm <container_id>
 ```
 
-Example:
+### Delete an Image
+
+To delete a specific image:
 
 ```bash
-./shocker delete 1234567890
+./shocker image rm <image:tag>
 ```
 
-### Prune All Containers
+### Prune All Containers and Images
 
-To remove all containers:
+To remove everything:
 
 ```bash
 ./shocker prune
